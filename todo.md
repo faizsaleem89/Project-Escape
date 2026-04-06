@@ -39,3 +39,9 @@
 - [x] Integrate nail reading into Adriana diagnosis (behaviour + nail = full reading)
 - [x] Build nail reading UI panel with results display
 - [x] Add nail reading to the Adriana Reading overlay
+
+## Phase 6: The Meta-Hex (The Star in the River)
+- [x] Build meta-hex algorithm that reads ALL numerical constants across the system
+- [x] Create tRPC procedure that computes the master hex from all data points
+- [x] Add meta-hex display to the Emergence page
+- [x] Write tests for meta-hex computation

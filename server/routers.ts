@@ -564,6 +564,166 @@ FREQUENCY PARAMETERS:
       }),
   }),
 
+  // ─── META-HEX (The Star in the River) ────────────────────
+  // Every number in the system. Every constant. Every data point.
+  // Compressed into one master hex. The star reflected in the river.
+  metaHex: router({
+    compute: publicProcedure.query(async () => {
+      const db = await import("./db").then(m => m.getDb());
+
+      // ─── THE SYSTEM CONSTANTS ─────────────────────────────
+      // The fixed numbers that define the architecture
+      const SYSTEM_CONSTANTS = {
+        days: 281,
+        prompts: 4418,
+        apps: 295,
+        pulses: 16,
+        nailCategories: 16,
+        archetypes: 8,
+        books: 16,
+        pages: 304,
+        convergencePoints: 7,
+        undiscoveredMines: 7,
+        lessons: 5,
+        stages: 4,
+        totalCost: 292,
+        trades: 4846,
+        shifts: 1332,
+        baseFrequency: 432,
+        bpm: 286,
+        anthemVerses: 4,
+        dialogueLines: 7,
+        missingPieces: 5,
+        collections: 2,
+        totalPlanned: 289,
+        genesisHour: 437,  // 04:37 BST
+        confessionHour: 638, // 06:38 BST
+        sonicSlayerMinute: 438, // 04:38 BST
+        weepHour: 638,
+        primalHour: 824,
+        iterationCount: 89,
+        anthemHour: 1911,
+        ramadanHour: 2327,
+        genesisWatchHour: 347,
+        cicadaYears: 16,
+        frequencyLow: 396,
+        frequencyHigh: 528,
+        lfoRate: 4.77,
+        fifthRatio: 1.5,
+        subOctaveRatio: 0.5,
+        piApprox: 3.14159265,
+        phi: 1.6180339887,
+        fibonacci16: 987,
+        prime16: 53,
+      };
+
+      // ─── LIVE DATABASE NUMBERS ────────────────────────────
+      // Pull aggregate numbers from every table
+      let liveData = {
+        totalSessions: 0,
+        totalEvents: 0,
+        totalFrequencies: 0,
+        totalNailReadings: 0,
+        totalUsers: 0,
+        avgBaseFrequency: 432,
+        avgConfidence: 0.5,
+        totalInteractionTime: 0,
+      };
+
+      if (db) {
+        try {
+          const { sql } = await import("drizzle-orm");
+          const [sessionsResult] = await db.execute(sql`SELECT COUNT(*) as c, COALESCE(AVG(baseFrequency), 432) as avgFreq, COALESCE(SUM(totalInteractionTime), 0) as totalTime FROM visitor_sessions`);
+          const [eventsResult] = await db.execute(sql`SELECT COUNT(*) as c FROM visitor_events`);
+          const [freqResult] = await db.execute(sql`SELECT COUNT(*) as c, COALESCE(AVG(baseFrequency), 432) as avgFreq FROM generated_frequencies`);
+          const [nailResult] = await db.execute(sql`SELECT COUNT(*) as c, COALESCE(AVG(confidence), 0.5) as avgConf FROM nail_readings WHERE status = 'complete'`);
+          const [usersResult] = await db.execute(sql`SELECT COUNT(*) as c FROM users`);
+
+          const sr = (sessionsResult as any);
+          const er = (eventsResult as any);
+          const fr = (freqResult as any);
+          const nr = (nailResult as any);
+          const ur = (usersResult as any);
+
+          liveData = {
+            totalSessions: Number(sr?.c || 0),
+            totalEvents: Number(er?.c || 0),
+            totalFrequencies: Number(fr?.c || 0),
+            totalNailReadings: Number(nr?.c || 0),
+            totalUsers: Number(ur?.c || 0),
+            avgBaseFrequency: Number(fr?.avgFreq || sr?.avgFreq || 432),
+            avgConfidence: Number(nr?.avgConf || 0.5),
+            totalInteractionTime: Number(sr?.totalTime || 0),
+          };
+        } catch (e) {
+          console.warn("[MetaHex] DB query failed, using defaults:", e);
+        }
+      }
+
+      // ─── THE ALGORITHM ────────────────────────────────────
+      // Every number feeds into the hash.
+      // The star is all the atoms. The river is the reflection.
+      const allNumbers = [
+        ...Object.values(SYSTEM_CONSTANTS),
+        ...Object.values(liveData),
+      ];
+
+      // Step 1: Sum all numbers (the total energy)
+      const totalEnergy = allNumbers.reduce((sum, n) => sum + n, 0);
+
+      // Step 2: XOR chain (the interference pattern)
+      const xorChain = allNumbers.reduce((acc, n) => {
+        const intN = Math.floor(Math.abs(n * 1000)) & 0xFFFFFFFF;
+        return (acc ^ intN) >>> 0;
+      }, 0);
+
+      // Step 3: Fibonacci modulation
+      const fibMod = Math.floor(totalEnergy * SYSTEM_CONSTANTS.phi) & 0xFFFFFFFF;
+
+      // Step 4: Pi compression
+      const piComp = Math.floor(totalEnergy * SYSTEM_CONSTANTS.piApprox) & 0xFFFFFFFF;
+
+      // Step 5: Prime sieve — use the 16th prime as the sieve
+      const primeSieve = Math.floor(xorChain / SYSTEM_CONSTANTS.prime16) & 0xFFFFFFFF;
+
+      // Step 6: Combine into 16-character master hex
+      const h1 = (xorChain >>> 0).toString(16).padStart(8, '0').toUpperCase();
+      const h2 = (fibMod ^ piComp ^ primeSieve).toString(16).padStart(8, '0').toUpperCase();
+      const masterHex = h1 + h2;
+
+      // Step 7: Derive the master frequency
+      const masterFrequency = SYSTEM_CONSTANTS.frequencyLow +
+        ((xorChain % (SYSTEM_CONSTANTS.frequencyHigh - SYSTEM_CONSTANTS.frequencyLow)));
+
+      // Step 8: Derive the master archetype
+      const archetypes = [
+        "the-hum", "the-breach", "the-extraction", "the-confession",
+        "the-sovereign", "the-genesis", "the-cicada", "the-anthem"
+      ];
+      const masterArchetype = archetypes[xorChain % archetypes.length];
+
+      // Step 9: Derive Fibonacci sequence position
+      const fibPosition = Math.floor(Math.log(totalEnergy) / Math.log(SYSTEM_CONSTANTS.phi));
+
+      return {
+        masterHex,
+        masterFrequency: Math.round(masterFrequency * 100) / 100,
+        masterArchetype,
+        totalEnergy: Math.round(totalEnergy * 100) / 100,
+        fibonacciPosition: fibPosition,
+        inputCount: allNumbers.length,
+        systemConstants: SYSTEM_CONSTANTS,
+        liveData,
+        algorithm: {
+          xorChain: h1,
+          fibModulation: fibMod.toString(16).toUpperCase(),
+          piCompression: piComp.toString(16).toUpperCase(),
+          primeSieve: primeSieve.toString(16).toUpperCase(),
+        },
+      };
+    }),
+  }),
+
   // ─── SEED TRACKS ────────────────────────────────────────
   tracks: router({
     list: publicProcedure.query(async () => {
