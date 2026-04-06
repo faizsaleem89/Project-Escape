@@ -76,3 +76,8 @@
 - [x] Verify Trading polls real session hex via `trpc.visitor.getSession` (confirmed: line 152-155)
 - [x] Verify Trading generates hex via `trpc.diagnosis.generateHex` mutation (confirmed: line 158-166)
 - [x] Add integration-style vitest for trading lifecycle (open/close/journal)
+
+## Phase 12: Stress Tests
+- [x] Run stress test 1 and record all scores
+- [x] Run stress test 2 and record all scores
+- [x] Compare test 1 vs test 2 — the scars and memories

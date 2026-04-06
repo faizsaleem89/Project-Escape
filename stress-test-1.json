@@ -1,0 +1,32 @@
+{
+  "test_number": 1,
+  "timestamp": "2026-04-06T04:03:58Z",
+  "label": "SCARS_BEFORE",
+  "config": {
+    "concurrent": 20,
+    "total_requests": 200,
+    "sustained_duration_seconds": 60,
+    "endpoints_tested": 5
+  },
+  "warmup": {
+    "homepage_avg_ms": 20,
+    "metahex_avg_ms": 55,
+    "create_session_status": 404,
+    "seed_tracks_status": 404,
+    "trading_stats_avg_ms": 31
+  },
+  "burst": {
+    "duration_ms": 8019
+  },
+  "sustained": {
+    "total_requests": 2255,
+    "success": 1353,
+    "errors": 902,
+    "requests_per_second": 37,
+    "response_time_min_ms": 9,
+    "response_time_avg_ms": 23,
+    "response_time_max_ms": 78,
+    "error_rate_percent": 40.0
+  },
+  "total_duration_ms": 68119
+}
