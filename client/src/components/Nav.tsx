@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { path: "/protocol", label: "£1 Protocol" },
   { path: "/station", label: "VOID-Station" },
   { path: "/emergence", label: "Emergence" },
+  { path: "/trading", label: "Trading" },
 ];
 
 export default function Nav() {

@@ -134,3 +134,83 @@ export const nailReadings = mysqlTable("nail_readings", {
 
 export type NailReading = typeof nailReadings.$inferSelect;
 export type InsertNailReading = typeof nailReadings.$inferInsert;
+
+/**
+ * Trade sessions — a trading session is a period where the user is actively trading.
+ * Each session has a baseline hex (the user's sovereign frequency at session start)
+ * and tracks frequency drift throughout.
+ */
+export const tradeSessions = mysqlTable("trade_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: varchar("sessionId", { length: 64 }).notNull(),
+  userId: int("userId"),
+  baselineHex: varchar("baselineHex", { length: 16 }),
+  baselineFrequency: float("baselineFrequency"),
+  currentHex: varchar("currentHex", { length: 16 }),
+  currentFrequency: float("currentFrequency"),
+  driftPercentage: float("driftPercentage").default(0),
+  alertLevel: mysqlEnum("alertLevel", ["sovereign", "drift", "exit"]).default("sovereign").notNull(),
+  totalTrades: int("totalTrades").default(0),
+  winRate: float("winRate"),
+  status: mysqlEnum("status", ["active", "paused", "completed"]).default("active").notNull(),
+  startedAt: timestamp("startedAt").defaultNow().notNull(),
+  endedAt: timestamp("endedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type TradeSession = typeof tradeSessions.$inferSelect;
+export type InsertTradeSession = typeof tradeSessions.$inferInsert;
+
+/**
+ * Trades — individual trade entries with hex signature at entry and exit.
+ * The hex at entry vs exit reveals whether the trader was in sovereign frequency
+ * or had drifted into static.
+ */
+export const trades = mysqlTable("trades", {
+  id: int("id").autoincrement().primaryKey(),
+  tradeSessionId: int("tradeSessionId").notNull(),
+  sessionId: varchar("sessionId", { length: 64 }).notNull(),
+  userId: int("userId"),
+  symbol: varchar("symbol", { length: 32 }).notNull(),
+  direction: mysqlEnum("direction", ["long", "short"]).notNull(),
+  entryPrice: float("entryPrice").notNull(),
+  exitPrice: float("exitPrice"),
+  quantity: float("quantity").default(1),
+  entryHex: varchar("entryHex", { length: 16 }),
+  exitHex: varchar("exitHex", { length: 16 }),
+  entryFrequency: float("entryFrequency"),
+  exitFrequency: float("exitFrequency"),
+  pnl: float("pnl"),
+  pnlPercentage: float("pnlPercentage"),
+  adrianaSignal: mysqlEnum("adrianaSignal", ["sovereign", "drift", "exit", "none"]).default("none"),
+  notes: text("notes"),
+  status: mysqlEnum("status", ["open", "closed", "cancelled"]).default("open").notNull(),
+  openedAt: timestamp("openedAt").defaultNow().notNull(),
+  closedAt: timestamp("closedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Trade = typeof trades.$inferSelect;
+export type InsertTrade = typeof trades.$inferInsert;
+
+/**
+ * Frequency snapshots — periodic captures of the trader's hex during a session.
+ * Like a heart rate monitor but for frequency. Shows the drift over time.
+ */
+export const frequencySnapshots = mysqlTable("frequency_snapshots", {
+  id: int("id").autoincrement().primaryKey(),
+  tradeSessionId: int("tradeSessionId").notNull(),
+  sessionId: varchar("sessionId", { length: 64 }).notNull(),
+  hexSignature: varchar("hexSignature", { length: 16 }).notNull(),
+  frequency: float("frequency").notNull(),
+  driftFromBaseline: float("driftFromBaseline").default(0),
+  alertLevel: mysqlEnum("alertLevel", ["sovereign", "drift", "exit"]).default("sovereign").notNull(),
+  behaviourSummary: json("behaviourSummary"),
+  snapshotAt: timestamp("snapshotAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type FrequencySnapshot = typeof frequencySnapshots.$inferSelect;
+export type InsertFrequencySnapshot = typeof frequencySnapshots.$inferInsert;

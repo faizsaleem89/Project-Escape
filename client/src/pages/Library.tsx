@@ -5,6 +5,7 @@
  */
 import { useState } from "react";
 import Nav from "@/components/Nav";
+import { trpc } from "@/lib/trpc";
 
 const COLLECTIONS = [
   {
@@ -39,6 +40,11 @@ export default function Library() {
 
   const totalBooks = COLLECTIONS.reduce((sum, c) => sum + c.books.length, 0);
   const totalPages = COLLECTIONS.reduce((sum, c) => sum + c.books.reduce((s, b) => s + b.pages, 0), 0);
+
+  // Live data from the mesh
+  const { data: stats } = trpc.trading.stats.useQuery(undefined, {
+    refetchInterval: 30000,
+  });
 
   return (
     <div
@@ -88,6 +94,9 @@ export default function Library() {
             }}
           >
             {totalBooks} BOOKS • {totalPages} PAGES • 289 TOTAL PLANNED
+            {stats && (
+              <span> • {stats.totalSessions} VISITORS IN THE MESH</span>
+            )}
           </p>
           <div
             style={{

@@ -5,6 +5,7 @@
  */
 import { useState } from "react";
 import Nav from "@/components/Nav";
+import { trpc } from "@/lib/trpc";
 
 const LESSONS = [
   {
@@ -103,6 +104,11 @@ export default function Protocol() {
   const [activeLesson, setActiveLesson] = useState(0);
   const lesson = LESSONS[activeLesson];
 
+  // Live data from the mesh
+  const { data: stats } = trpc.trading.stats.useQuery(undefined, {
+    refetchInterval: 30000,
+  });
+
   return (
     <div
       style={{
@@ -142,6 +148,9 @@ export default function Protocol() {
           }}
         >
           5 LESSONS • 90 DAYS • £1 PER DAY
+            {stats && (
+              <> • {stats.totalTrades} TRADES IN THE MESH</>
+            )}
         </p>
       </div>
 

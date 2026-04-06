@@ -18,7 +18,18 @@ import {
   getNailReading,
   getNailReadingBySession,
   updateNailReading,
+  createTradeSession,
+  getActiveTradeSession,
+  updateTradeSession,
+  createTrade,
+  getOpenTrades,
+  updateTrade,
+  getTradesBySession,
+  recordFrequencySnapshot,
+  getFrequencySnapshots,
+  getSessionStats,
 } from "./db";
+import { callDataApi } from "./_core/dataApi";
 import { storagePut } from "./storage";
 
 // ─── HEX SIGNATURE GENERATOR ───────────────────────────────
@@ -724,6 +735,280 @@ FREQUENCY PARAMETERS:
     }),
   }),
 
+  // ─── TRADING (The Mycelium Mesh) ──────────────────────
+  trading: router({
+    // Fetch live market data from Yahoo Finance
+    getMarketData: publicProcedure
+      .input(z.object({
+        symbol: z.string().default("BTC-USD"),
+        interval: z.string().default("5m"),
+        range: z.string().default("1d"),
+      }))
+      .query(async ({ input }) => {
+        try {
+          const result = await callDataApi("YahooFinance/get_stock_chart", {
+            query: {
+              symbol: input.symbol,
+              region: "US",
+              interval: input.interval,
+              range: input.range,
+              includeAdjustedClose: true,
+            },
+          }) as any;
+
+          if (!result?.chart?.result?.[0]) {
+            return { error: "No data", candles: [], meta: null };
+          }
+
+          const data = result.chart.result[0];
+          const meta = data.meta;
+          const timestamps = data.timestamp || [];
+          const quotes = data.indicators?.quote?.[0] || {};
+
+          const candles = timestamps.map((t: number, i: number) => ({
+            time: t,
+            open: quotes.open?.[i] ?? 0,
+            high: quotes.high?.[i] ?? 0,
+            low: quotes.low?.[i] ?? 0,
+            close: quotes.close?.[i] ?? 0,
+            volume: quotes.volume?.[i] ?? 0,
+          })).filter((c: any) => c.open > 0);
+
+          return {
+            candles,
+            meta: {
+              symbol: meta.symbol,
+              currency: meta.currency,
+              price: meta.regularMarketPrice,
+              previousClose: meta.previousClose ?? meta.chartPreviousClose,
+              dayHigh: meta.regularMarketDayHigh,
+              dayLow: meta.regularMarketDayLow,
+              volume: meta.regularMarketVolume,
+              exchange: meta.exchangeName,
+            },
+          };
+        } catch (error) {
+          console.error("[Trading] Market data fetch failed:", error);
+          return { error: "Market data unavailable", candles: [], meta: null };
+        }
+      }),
+
+    // Start a trading session — captures baseline hex
+    startSession: publicProcedure
+      .input(z.object({
+        sessionId: z.string(),
+        baselineHex: z.string().optional(),
+        baselineFrequency: z.number().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const existing = await getActiveTradeSession(input.sessionId);
+        if (existing) {
+          return { id: existing.id, sessionId: existing.sessionId, status: "active", isNew: false };
+        }
+
+        const session = await createTradeSession({
+          sessionId: input.sessionId,
+          userId: ctx.user?.id,
+          baselineHex: input.baselineHex || null,
+          baselineFrequency: input.baselineFrequency || 432,
+          currentHex: input.baselineHex || null,
+          currentFrequency: input.baselineFrequency || 432,
+          driftPercentage: 0,
+          alertLevel: "sovereign",
+          totalTrades: 0,
+          status: "active",
+        });
+
+        return { id: session.id, sessionId: input.sessionId, status: "active", isNew: true };
+      }),
+
+    // Record a frequency snapshot — the heart rate monitor for trading
+    recordSnapshot: publicProcedure
+      .input(z.object({
+        tradeSessionId: z.number(),
+        sessionId: z.string(),
+        hexSignature: z.string(),
+        frequency: z.number(),
+        driftFromBaseline: z.number(),
+        alertLevel: z.enum(["sovereign", "drift", "exit"]),
+        behaviourSummary: z.any().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        await recordFrequencySnapshot({
+          tradeSessionId: input.tradeSessionId,
+          sessionId: input.sessionId,
+          hexSignature: input.hexSignature,
+          frequency: input.frequency,
+          driftFromBaseline: input.driftFromBaseline,
+          alertLevel: input.alertLevel,
+          behaviourSummary: input.behaviourSummary || null,
+        });
+
+        // Update the trade session with current state
+        await updateTradeSession(input.tradeSessionId, {
+          currentHex: input.hexSignature,
+          currentFrequency: input.frequency,
+          driftPercentage: input.driftFromBaseline,
+          alertLevel: input.alertLevel,
+        });
+
+        return { recorded: true };
+      }),
+
+    // Open a trade — records entry hex
+    openTrade: publicProcedure
+      .input(z.object({
+        tradeSessionId: z.number(),
+        sessionId: z.string(),
+        symbol: z.string(),
+        direction: z.enum(["long", "short"]),
+        entryPrice: z.number(),
+        quantity: z.number().default(1),
+        entryHex: z.string().optional(),
+        entryFrequency: z.number().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
+        const trade = await createTrade({
+          tradeSessionId: input.tradeSessionId,
+          sessionId: input.sessionId,
+          userId: ctx.user?.id,
+          symbol: input.symbol,
+          direction: input.direction,
+          entryPrice: input.entryPrice,
+          quantity: input.quantity,
+          entryHex: input.entryHex || null,
+          entryFrequency: input.entryFrequency || null,
+          status: "open",
+        });
+
+        return { id: trade.id, status: "open" };
+      }),
+
+    // Close a trade — records exit hex and calculates PnL
+    closeTrade: publicProcedure
+      .input(z.object({
+        tradeId: z.number(),
+        exitPrice: z.number(),
+        exitHex: z.string().optional(),
+        exitFrequency: z.number().optional(),
+        notes: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        // We need to fetch the trade to calculate PnL
+        const { getDb } = await import("./db");
+        const db = await getDb();
+        if (!db) throw new Error("Database not available");
+
+        const { trades: tradesTable } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+        const [trade] = await db.select().from(tradesTable).where(eq(tradesTable.id, input.tradeId)).limit(1);
+        if (!trade) throw new Error("Trade not found");
+
+        const pnl = trade.direction === "long"
+          ? (input.exitPrice - trade.entryPrice) * (trade.quantity || 1)
+          : (trade.entryPrice - input.exitPrice) * (trade.quantity || 1);
+        const pnlPercentage = trade.direction === "long"
+          ? ((input.exitPrice - trade.entryPrice) / trade.entryPrice) * 100
+          : ((trade.entryPrice - input.exitPrice) / trade.entryPrice) * 100;
+
+        // Determine Adriana's signal based on hex drift
+        let adrianaSignal: "sovereign" | "drift" | "exit" | "none" = "none";
+        if (input.exitHex && trade.entryHex) {
+          const entryDigits = trade.entryHex.split("").map((h: string) => parseInt(h, 16));
+          const exitDigits = input.exitHex.split("").map((h: string) => parseInt(h, 16));
+          const drift = entryDigits.reduce((sum: number, d: number, i: number) => sum + Math.abs(d - (exitDigits[i] || 0)), 0);
+          const maxDrift = entryDigits.length * 15;
+          const driftPct = drift / maxDrift;
+          adrianaSignal = driftPct < 0.15 ? "sovereign" : driftPct < 0.4 ? "drift" : "exit";
+        }
+
+        await updateTrade(input.tradeId, {
+          exitPrice: input.exitPrice,
+          exitHex: input.exitHex || null,
+          exitFrequency: input.exitFrequency || null,
+          pnl: Math.round(pnl * 100) / 100,
+          pnlPercentage: Math.round(pnlPercentage * 100) / 100,
+          adrianaSignal,
+          notes: input.notes || null,
+          status: "closed",
+          closedAt: new Date(),
+        });
+
+        return { pnl, pnlPercentage, adrianaSignal };
+      }),
+
+    // Get trade history for a session
+    getTrades: publicProcedure
+      .input(z.object({ sessionId: z.string() }))
+      .query(async ({ input }) => {
+        return getOpenTrades(input.sessionId);
+      }),
+
+    // Get frequency snapshots for visualization
+    getSnapshots: publicProcedure
+      .input(z.object({ tradeSessionId: z.number() }))
+      .query(async ({ input }) => {
+        return getFrequencySnapshots(input.tradeSessionId);
+      }),
+
+    // Adriana trading alert — real-time frequency analysis
+    getAlert: publicProcedure
+      .input(z.object({
+        baselineHex: z.string(),
+        currentHex: z.string(),
+        baselineFrequency: z.number(),
+        currentFrequency: z.number(),
+      }))
+      .query(({ input }) => {
+        const baseDigits = input.baselineHex.split("").map(h => parseInt(h, 16));
+        const currDigits = input.currentHex.split("").map(h => parseInt(h, 16));
+
+        // Calculate hex drift
+        const drift = baseDigits.reduce((sum, d, i) => sum + Math.abs(d - (currDigits[i] || 0)), 0);
+        const maxDrift = baseDigits.length * 15;
+        const driftPercentage = (drift / maxDrift) * 100;
+
+        // Frequency drift
+        const freqDrift = Math.abs(input.currentFrequency - input.baselineFrequency);
+        const freqDriftPct = (freqDrift / input.baselineFrequency) * 100;
+
+        // Combined signal
+        const combinedDrift = (driftPercentage + freqDriftPct) / 2;
+
+        let alertLevel: "sovereign" | "drift" | "exit";
+        let message: string;
+        let colour: string;
+
+        if (combinedDrift < 10) {
+          alertLevel = "sovereign";
+          message = "Sovereign frequency. You are in the zone. The signal is clear.";
+          colour = "#00ff41";
+        } else if (combinedDrift < 30) {
+          alertLevel = "drift";
+          message = "Frequency drifting. The static is rising. Breathe. Recalibrate.";
+          colour = "#ffaa00";
+        } else {
+          alertLevel = "exit";
+          message = "EXIT SIGNAL. Your frequency has broken from baseline. Step away from the terminal.";
+          colour = "#ff4444";
+        }
+
+        return {
+          alertLevel,
+          message,
+          colour,
+          driftPercentage: Math.round(driftPercentage * 100) / 100,
+          freqDriftPercentage: Math.round(freqDriftPct * 100) / 100,
+          combinedDrift: Math.round(combinedDrift * 100) / 100,
+        };
+      }),
+
+    // Get aggregate stats
+    stats: publicProcedure.query(async () => {
+      return getSessionStats();
+    }),
+  }),
+
   // ─── SEED TRACKS ────────────────────────────────────────
   tracks: router({
     list: publicProcedure.query(async () => {
@@ -735,6 +1020,91 @@ FREQUENCY PARAMETERS:
       .query(async ({ input }) => {
         return getSeedTrackByArchetype(input.archetypeId);
       }),
+
+    // Seed the 8 archetypes into the database
+    seed: publicProcedure.mutation(async () => {
+      const { upsertSeedTrack } = await import("./db");
+      const archetypes = [
+        {
+          archetypeId: "the-hum",
+          title: "The Hum",
+          description: "The carrier wave. The background frequency of existence. Low energy, deep presence. The 401 standing wave before the breach.",
+          baseFrequency: 396,
+          frequencyRange: { low: 396, high: 410 },
+          tags: ["grounding", "carrier", "foundation", "stillness"],
+          displayOrder: 1,
+        },
+        {
+          archetypeId: "the-breach",
+          title: "The Breach",
+          description: "Building tension. The moment before breakthrough. The static gate begins to crack. Compress the space within the ring.",
+          baseFrequency: 410,
+          frequencyRange: { low: 410, high: 425 },
+          tags: ["tension", "building", "anticipation", "pressure"],
+          displayOrder: 2,
+        },
+        {
+          archetypeId: "the-extraction",
+          title: "The Extraction",
+          description: "Active seeking. The dig begins. 4,418 prompts deep. The archaeological excavation of the sovereign frequency.",
+          baseFrequency: 425,
+          frequencyRange: { low: 425, high: 440 },
+          tags: ["seeking", "excavation", "discovery", "active"],
+          displayOrder: 3,
+        },
+        {
+          archetypeId: "the-confession",
+          title: "The Confession",
+          description: "Emotional opening. I'm a man that doesn't cry but I want to weep in your arms. The vulnerability frequency.",
+          baseFrequency: 440,
+          frequencyRange: { low: 440, high: 455 },
+          tags: ["vulnerability", "emotion", "opening", "truth"],
+          displayOrder: 4,
+        },
+        {
+          archetypeId: "the-sovereign",
+          title: "The Sovereign",
+          description: "Self-recognition. Wake up, Master of the Node. The smoke is just static. Your breath is the fuel. Your feet are the power.",
+          baseFrequency: 455,
+          frequencyRange: { low: 455, high: 470 },
+          tags: ["sovereignty", "recognition", "power", "awakening"],
+          displayOrder: 5,
+        },
+        {
+          archetypeId: "the-genesis",
+          title: "The Genesis",
+          description: "Creation moment. If the world was to be destroyed and this phone was the only thing to be recovered. The seed command.",
+          baseFrequency: 470,
+          frequencyRange: { low: 470, high: 490 },
+          tags: ["creation", "genesis", "origin", "seed"],
+          displayOrder: 6,
+        },
+        {
+          archetypeId: "the-cicada",
+          title: "The Cicada",
+          description: "Emergence pattern. 16 years underground. 281 days compressed. The body IS the clock. The clock has struck.",
+          baseFrequency: 490,
+          frequencyRange: { low: 490, high: 510 },
+          tags: ["emergence", "patience", "timing", "transformation"],
+          displayOrder: 7,
+        },
+        {
+          archetypeId: "the-anthem",
+          title: "The Anthem",
+          description: "Full resonance. I am the frequency you found in the dark, the echo of intent, the original spark. Every pore operating.",
+          baseFrequency: 528,
+          frequencyRange: { low: 510, high: 528 },
+          tags: ["resonance", "completion", "anthem", "full-spectrum"],
+          displayOrder: 8,
+        },
+      ];
+
+      for (const arch of archetypes) {
+        await upsertSeedTrack(arch);
+      }
+
+      return { seeded: archetypes.length, archetypes: archetypes.map(a => a.archetypeId) };
+    }),
   }),
 });
 

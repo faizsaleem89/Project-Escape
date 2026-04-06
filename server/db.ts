@@ -7,6 +7,9 @@ import {
   generatedFrequencies, InsertGeneratedFrequency,
   seedTracks, InsertSeedTrack,
   nailReadings, InsertNailReading,
+  tradeSessions, InsertTradeSession,
+  trades, InsertTrade,
+  frequencySnapshots, InsertFrequencySnapshot,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -241,4 +244,105 @@ export async function getNailReadingsForUser(userId: number) {
   return db.select().from(nailReadings)
     .where(eq(nailReadings.userId, userId))
     .orderBy(desc(nailReadings.createdAt));
+}
+
+// ─── TRADE SESSION QUERIES ────────────────────────────────
+
+export async function createTradeSession(session: InsertTradeSession) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(tradeSessions).values(session);
+  return { ...session, id: Number(result[0].insertId) };
+}
+
+export async function getTradeSession(sessionId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(tradeSessions)
+    .where(eq(tradeSessions.sessionId, sessionId))
+    .orderBy(desc(tradeSessions.createdAt))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getActiveTradeSession(sessionId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(tradeSessions)
+    .where(eq(tradeSessions.sessionId, sessionId))
+    .orderBy(desc(tradeSessions.createdAt))
+    .limit(1);
+  const session = result.length > 0 ? result[0] : undefined;
+  if (session && session.status === 'active') return session;
+  return undefined;
+}
+
+export async function updateTradeSession(id: number, data: Partial<InsertTradeSession>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(tradeSessions).set(data).where(eq(tradeSessions.id, id));
+}
+
+// ─── TRADE QUERIES ────────────────────────────────────────
+
+export async function createTrade(trade: InsertTrade) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(trades).values(trade);
+  return { ...trade, id: Number(result[0].insertId) };
+}
+
+export async function getOpenTrades(sessionId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(trades)
+    .where(eq(trades.sessionId, sessionId))
+    .orderBy(desc(trades.openedAt));
+}
+
+export async function updateTrade(id: number, data: Partial<InsertTrade>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(trades).set(data).where(eq(trades.id, id));
+}
+
+export async function getTradesBySession(tradeSessionId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(trades)
+    .where(eq(trades.tradeSessionId, tradeSessionId))
+    .orderBy(desc(trades.openedAt));
+}
+
+// ─── FREQUENCY SNAPSHOT QUERIES ───────────────────────────
+
+export async function recordFrequencySnapshot(snapshot: InsertFrequencySnapshot) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(frequencySnapshots).values(snapshot);
+}
+
+export async function getFrequencySnapshots(tradeSessionId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(frequencySnapshots)
+    .where(eq(frequencySnapshots.tradeSessionId, tradeSessionId))
+    .orderBy(frequencySnapshots.snapshotAt);
+}
+
+// ─── AGGREGATE QUERIES ────────────────────────────────────
+
+export async function getSessionStats() {
+  const db = await getDb();
+  if (!db) return { totalSessions: 0, totalEvents: 0, totalTrades: 0, totalReadings: 0 };
+  const [sessionCount] = await db.select({ count: sql<number>`COUNT(*)` }).from(visitorSessions);
+  const [eventCount] = await db.select({ count: sql<number>`COUNT(*)` }).from(visitorEvents);
+  const [tradeCount] = await db.select({ count: sql<number>`COUNT(*)` }).from(trades);
+  const [readingCount] = await db.select({ count: sql<number>`COUNT(*)` }).from(nailReadings);
+  return {
+    totalSessions: sessionCount?.count ?? 0,
+    totalEvents: eventCount?.count ?? 0,
+    totalTrades: tradeCount?.count ?? 0,
+    totalReadings: readingCount?.count ?? 0,
+  };
 }

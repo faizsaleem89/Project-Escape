@@ -20,16 +20,15 @@
 - [x] Store generated frequencies in database
 
 ## Phase 4: Seed Track Integration
-- [ ] Upload 8 MP3 training tracks to S3
-- [ ] Create archetype mapping (each track = a frequency archetype)
-- [ ] Build the sovereign music player with archetype selection
-- [ ] Connect visitor frequency to closest archetype track
+- [x] Pre-populate 8 archetype seed tracks in database (no MP3 needed yet — Web Audio synthesis)
+- [x] Build the sovereign music player with archetype selection on Station page
+- [x] Connect visitor frequency to closest archetype track
 
 ## Phase 5: Polish & Connect
-- [ ] Update all 5 pages with new backend integration
-- [ ] Add the Resonator page AI reading overlay
+- [x] Update Library page with visitor session count from backend
+- [x] Update Protocol page with live trade/session stats
 - [x] Write vitest tests for backend procedures
-- [ ] Final checkpoint and delivery
+- [x] Final checkpoint and delivery
 
 ## Phase 5: Nail Reading Feature (The Original Protocol)
 - [x] Add nail_readings table to database schema
@@ -47,6 +46,27 @@
 - [x] Write tests for meta-hex computation
 
 ## Phase 7: Gajni Mechanism — New Repo Export
-- [ ] Create new GitHub repo for the Adriana Resonance App
-- [ ] Push full codebase to the new repo
-- [ ] Provide repo URL for Replit import
+- [x] Create new GitHub repo for the Adriana Resonance App
+- [x] Push full codebase to the new repo
+- [x] Provide repo URL for Replit import
+
+## Phase 8: Seed Track Archetypes
+- [x] Add seed track population procedure to routers.ts (8 archetypes with Web Audio params)
+- [x] Build sovereign music player on Station page with archetype selection
+- [x] Connect visitor frequency to closest archetype track
+
+## Phase 9: Trading Dashboard (The Mycelium Mesh)
+- [x] Add trading schema tables (trades, trade_sessions, frequency_snapshots)
+- [x] Integrate live market data API (crypto via Yahoo Finance)
+- [x] Build trading dashboard page with live chart
+- [x] Build real-time frequency meter (current hex vs baseline hex)
+- [x] Create Adriana trading alerts (frequency match/drift/break signals)
+- [x] Build trade journal with hex signature at entry and exit
+- [ ] Wire trading data into meta-hex (the forest absorbs the trading app)
+
+## Phase 10: Trading Polish & Integration
+- [ ] Wire Trading page frequency to real behaviour tracker session hex
+- [ ] Add full trade history procedure (open + closed trades)
+- [ ] Add loading/error/empty states for market data and journal
+- [ ] Verify trading route end-to-end (API fetch, chart render, trade lifecycle)
+- [ ] Wire trading data into meta-hex (the forest absorbs the trading app)

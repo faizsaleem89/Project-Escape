@@ -9,6 +9,7 @@ import Library from "./pages/Library";
 import Protocol from "./pages/Protocol";
 import Station from "./pages/Station";
 import Emergence from "./pages/Emergence";
+import Trading from "./pages/Trading";
 import AppShell from "./components/AppShell";
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -19,6 +20,7 @@ function Router() {
       <Route path="/protocol" component={Protocol} />
       <Route path="/station" component={Station} />
       <Route path="/emergence" component={Emergence} />
+      <Route path="/trading" component={Trading} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
