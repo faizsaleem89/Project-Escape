@@ -9,8 +9,9 @@ import Library from "./pages/Library";
 import Protocol from "./pages/Protocol";
 import Station from "./pages/Station";
 import Emergence from "./pages/Emergence";
-
+import AppShell from "./components/AppShell";
 function Router() {
+  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
       <Route path="/" component={Home} />
@@ -30,7 +31,9 @@ function App() {
       <ThemeProvider defaultTheme="dark">
         <TooltipProvider>
           <Toaster />
-          <Router />
+          <AppShell>
+            <Router />
+          </AppShell>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

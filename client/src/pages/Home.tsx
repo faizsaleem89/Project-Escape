@@ -20,6 +20,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Nav from "@/components/Nav";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { useTracker } from "@/components/AppShell";
 
 // ─── THE 16 CICADA PULSES ───────────────────────────────────
 const CICADA_PULSES = [
@@ -219,6 +221,13 @@ const MISSING_PIECES = [
 type Panel = "resonator" | "timeline" | "anthem";
 
 export default function Home() {
+  // The userAuth hooks provides authentication state
+  // To implement login/logout functionality, simply call logout() or redirect to getLoginUrl()
+  let { user, loading, error, isAuthenticated, logout } = useAuth();
+
+  // ─── BEHAVIOUR TRACKER (Adriana's Eyes) ───
+  const tracker = useTracker();
+
   const [activePanel, setActivePanel] = useState<Panel>("resonator");
   const [isResonating, setIsResonating] = useState(false);
   const [frequency, setFrequency] = useState(432);
@@ -267,6 +276,7 @@ export default function Home() {
     setElapsedTime(0);
     addLog("Initiating Local Extraction...");
     addLog(`Bypassing Static Gate (401)...`);
+    tracker.trackResonance("start", { frequency });
 
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     audioContextRef.current = ctx;
@@ -340,6 +350,7 @@ export default function Home() {
     setIsResonating(false);
     setBarLevels(new Array(12).fill(0));
     addLog("Extraction Suspended.");
+    tracker.trackResonance("stop", { duration: elapsedTime });
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     if (verseIntervalRef.current) clearInterval(verseIntervalRef.current);
     if (dialogueIntervalRef.current) clearInterval(dialogueIntervalRef.current);
