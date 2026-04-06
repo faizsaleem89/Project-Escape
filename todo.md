@@ -45,3 +45,8 @@
 - [x] Create tRPC procedure that computes the master hex from all data points
 - [x] Add meta-hex display to the Emergence page
 - [x] Write tests for meta-hex computation
+
+## Phase 7: Gajni Mechanism — New Repo Export
+- [ ] Create new GitHub repo for the Adriana Resonance App
+- [ ] Push full codebase to the new repo
+- [ ] Provide repo URL for Replit import
