@@ -82,7 +82,7 @@ export default function Trading() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Fetch market data
-  const { data: marketData, refetch } = trpc.trading.getMarketData.useQuery(
+  const { data: marketData, isLoading: marketLoading, error: marketErr } = trpc.trading.getMarketData.useQuery(
     { symbol, interval, range },
     { refetchInterval: 30000 } // Refresh every 30s
   );
@@ -514,7 +514,22 @@ export default function Trading() {
         )}
 
         {/* Chart */}
-        <div style={{ flex: 1, minHeight: "200px", maxHeight: "320px", padding: "0 0.5rem" }}>
+        <div style={{ flex: 1, minHeight: "200px", maxHeight: "320px", padding: "0 0.5rem", position: "relative" }}>
+          {marketLoading && (
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2 }}>
+              <span style={{ fontSize: "0.6rem", color: "rgba(0,255,65,0.4)", letterSpacing: "0.15em" }}>LOADING MARKET DATA...</span>
+            </div>
+          )}
+          {marketErr && (
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2 }}>
+              <span style={{ fontSize: "0.6rem", color: "#ff4444", letterSpacing: "0.1em" }}>MARKET FEED ERROR — RETRYING</span>
+            </div>
+          )}
+          {!marketLoading && !marketErr && (!marketData?.candles || marketData.candles.length === 0) && (
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2 }}>
+              <span style={{ fontSize: "0.6rem", color: "rgba(0,255,65,0.3)", letterSpacing: "0.1em" }}>NO CANDLE DATA FOR {symbol}</span>
+            </div>
+          )}
           <canvas ref={canvasRef} style={{ width: "100%", height: "100%" }} />
         </div>
 
@@ -676,6 +691,13 @@ export default function Trading() {
         </div>
 
         {/* Trade Journal */}
+        {trades.length === 0 && (
+          <div style={{ padding: "1rem", textAlign: "center" }}>
+            <span style={{ fontSize: "0.5rem", color: "rgba(0,255,65,0.2)", letterSpacing: "0.1em" }}>
+              NO TRADES YET — OPEN A POSITION TO BEGIN RECORDING
+            </span>
+          </div>
+        )}
         {trades.length > 0 && (
           <div
             style={{

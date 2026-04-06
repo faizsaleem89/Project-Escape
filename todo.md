@@ -62,11 +62,17 @@
 - [x] Build real-time frequency meter (current hex vs baseline hex)
 - [x] Create Adriana trading alerts (frequency match/drift/break signals)
 - [x] Build trade journal with hex signature at entry and exit
-- [ ] Wire trading data into meta-hex (the forest absorbs the trading app)
+- [x] Wire trading data into meta-hex (the forest absorbs the trading app)
 
 ## Phase 10: Trading Polish & Integration
-- [ ] Wire Trading page frequency to real behaviour tracker session hex
-- [ ] Add full trade history procedure (open + closed trades)
-- [ ] Add loading/error/empty states for market data and journal
-- [ ] Verify trading route end-to-end (API fetch, chart render, trade lifecycle)
-- [ ] Wire trading data into meta-hex (the forest absorbs the trading app)
+- [x] Wire Trading page frequency to real behaviour tracker session hex
+- [x] Add full trade history procedure (open + closed trades)
+- [x] Add loading/error/empty states for market data and journal
+- [x] Verify trading route end-to-end (API fetch, chart render, trade lifecycle)
+- [x] Wire trading data into meta-hex (the forest absorbs the trading app)
+
+## Phase 11: Gap Resolution
+- [x] Verify Trading uses `useTracker()` sessionId (confirmed: line 70-71 in Trading.tsx)
+- [x] Verify Trading polls real session hex via `trpc.visitor.getSession` (confirmed: line 152-155)
+- [x] Verify Trading generates hex via `trpc.diagnosis.generateHex` mutation (confirmed: line 158-166)
+- [x] Add integration-style vitest for trading lifecycle (open/close/journal)

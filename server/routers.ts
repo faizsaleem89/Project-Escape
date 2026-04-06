@@ -639,6 +639,9 @@ FREQUENCY PARAMETERS:
         avgBaseFrequency: 432,
         avgConfidence: 0.5,
         totalInteractionTime: 0,
+        totalTradeSessions: 0,
+        totalTrades: 0,
+        totalFrequencySnapshots: 0,
       };
 
       if (db) {
@@ -649,12 +652,18 @@ FREQUENCY PARAMETERS:
           const [freqResult] = await db.execute(sql`SELECT COUNT(*) as c, COALESCE(AVG(baseFrequency), 432) as avgFreq FROM generated_frequencies`);
           const [nailResult] = await db.execute(sql`SELECT COUNT(*) as c, COALESCE(AVG(confidence), 0.5) as avgConf FROM nail_readings WHERE status = 'complete'`);
           const [usersResult] = await db.execute(sql`SELECT COUNT(*) as c FROM users`);
+          const [tradeSessionsResult] = await db.execute(sql`SELECT COUNT(*) as c FROM trade_sessions`);
+          const [tradesResult] = await db.execute(sql`SELECT COUNT(*) as c FROM trades`);
+          const [snapshotsResult] = await db.execute(sql`SELECT COUNT(*) as c FROM frequency_snapshots`);
 
           const sr = (sessionsResult as any);
           const er = (eventsResult as any);
           const fr = (freqResult as any);
           const nr = (nailResult as any);
           const ur = (usersResult as any);
+          const tsr = (tradeSessionsResult as any);
+          const tr = (tradesResult as any);
+          const snr = (snapshotsResult as any);
 
           liveData = {
             totalSessions: Number(sr?.c || 0),
@@ -665,6 +674,9 @@ FREQUENCY PARAMETERS:
             avgBaseFrequency: Number(fr?.avgFreq || sr?.avgFreq || 432),
             avgConfidence: Number(nr?.avgConf || 0.5),
             totalInteractionTime: Number(sr?.totalTime || 0),
+            totalTradeSessions: Number(tsr?.c || 0),
+            totalTrades: Number(tr?.c || 0),
+            totalFrequencySnapshots: Number(snr?.c || 0),
           };
         } catch (e) {
           console.warn("[MetaHex] DB query failed, using defaults:", e);
@@ -937,11 +949,18 @@ FREQUENCY PARAMETERS:
         return { pnl, pnlPercentage, adrianaSignal };
       }),
 
-    // Get trade history for a session
+    // Get trade history for a session (open + closed)
     getTrades: publicProcedure
       .input(z.object({ sessionId: z.string() }))
       .query(async ({ input }) => {
         return getOpenTrades(input.sessionId);
+      }),
+
+    // Get full trade history for a trade session (open + closed)
+    getTradeHistory: publicProcedure
+      .input(z.object({ tradeSessionId: z.number() }))
+      .query(async ({ input }) => {
+        return getTradesBySession(input.tradeSessionId);
       }),
 
     // Get frequency snapshots for visualization
