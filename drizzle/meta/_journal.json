@@ -29,6 +29,13 @@
       "when": 1775446680790,
       "tag": "0003_past_cobalt_man",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1775519767448,
+      "tag": "0004_peaceful_hairball",
+      "breakpoints": true
     }
   ]
 }

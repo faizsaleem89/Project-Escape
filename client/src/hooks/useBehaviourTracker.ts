@@ -16,7 +16,7 @@ type TrackedEvent = {
   eventType: string;
   page?: string;
   target?: string;
-  eventData?: Record<string, unknown>;
+  eventData?: Record<string, string | number | boolean | null>;
   eventTimestamp: number;
 };
 
@@ -86,7 +86,7 @@ export function useBehaviourTracker() {
   const track = useCallback((
     eventType: string,
     target?: string,
-    eventData?: Record<string, unknown>
+    eventData?: Record<string, string | number | boolean | null>
   ) => {
     eventBuffer.current.push({
       eventType,
@@ -104,7 +104,7 @@ export function useBehaviourTracker() {
   }, [track]);
 
   // Track click
-  const trackClick = useCallback((target: string, data?: Record<string, unknown>) => {
+  const trackClick = useCallback((target: string, data?: Record<string, string | number | boolean | null>) => {
     track("click", target, data);
   }, [track]);
 
@@ -121,7 +121,7 @@ export function useBehaviourTracker() {
   }, [track]);
 
   // Track resonance engagement (playing the frequency engine)
-  const trackResonance = useCallback((action: string, data?: Record<string, unknown>) => {
+  const trackResonance = useCallback((action: string, data?: Record<string, string | number | boolean | null>) => {
     track("resonance", action, data);
   }, [track]);
 

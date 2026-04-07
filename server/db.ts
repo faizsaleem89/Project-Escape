@@ -10,6 +10,8 @@ import {
   tradeSessions, InsertTradeSession,
   trades, InsertTrade,
   frequencySnapshots, InsertFrequencySnapshot,
+  entranceKeys, InsertEntranceKey,
+  sovereignBooks, InsertSovereignBook,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -345,4 +347,49 @@ export async function getSessionStats() {
     totalTrades: tradeCount?.count ?? 0,
     totalReadings: readingCount?.count ?? 0,
   };
+}
+
+// ─── ENTRANCE KEY QUERIES ───────────────────────────────────
+
+export async function saveEntranceKey(data: InsertEntranceKey) {
+  const db = await getDb();
+  if (!db) return null;
+  const [result] = await db.insert(entranceKeys).values(data);
+  return result.insertId;
+}
+
+export async function getEntranceKey(sessionId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(entranceKeys).where(eq(entranceKeys.sessionId, sessionId)).limit(1);
+  return rows[0] || null;
+}
+
+// ─── SOVEREIGN BOOK QUERIES ─────────────────────────────────
+
+export async function saveSovereignBook(data: InsertSovereignBook) {
+  const db = await getDb();
+  if (!db) return null;
+  const [result] = await db.insert(sovereignBooks).values(data);
+  return result.insertId;
+}
+
+export async function getSovereignBook(sessionId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(sovereignBooks).where(eq(sovereignBooks.sessionId, sessionId)).limit(1);
+  return rows[0] || null;
+}
+
+export async function getSovereignBooksByCollection(collectionId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(sovereignBooks).where(eq(sovereignBooks.collectionId, collectionId));
+}
+
+export async function getBookCount() {
+  const db = await getDb();
+  if (!db) return 0;
+  const rows = await db.select({ count: sql<number>`count(*)` }).from(sovereignBooks);
+  return rows[0]?.count || 0;
 }

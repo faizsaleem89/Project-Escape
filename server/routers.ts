@@ -45,6 +45,13 @@ import {
   getAllBenefits,
   getBenefit,
 } from "./sovereignField";
+import {
+  saveEntranceKey,
+  getEntranceKey,
+  saveSovereignBook,
+  getSovereignBook,
+  getBookCount,
+} from "./db";
 
 const __filename_local = fileURLToPath(import.meta.url);
 const __dirname_local = dirname(__filename_local);
@@ -259,7 +266,7 @@ export const appRouter = router({
           eventType: z.string(),
           page: z.string().optional(),
           target: z.string().optional(),
-          eventData: z.any().optional(),
+          eventData: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
           eventTimestamp: z.number(),
         })),
       }))
@@ -891,7 +898,7 @@ FREQUENCY PARAMETERS:
         frequency: z.number(),
         driftFromBaseline: z.number(),
         alertLevel: z.enum(["sovereign", "drift", "exit"]),
-        behaviourSummary: z.any().optional(),
+        behaviourSummary: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
       }))
       .mutation(async ({ input }) => {
         await recordFrequencySnapshot({
@@ -1464,6 +1471,163 @@ FREQUENCY PARAMETERS:
       .query(({ input }) => {
         return getBenefit(input.id) ?? null;
       }),
+  }),
+
+  // ─── THE GATE — Entrance Key + QR Flower ──────────────────
+  gate: router({
+    // Read the visitor's entrance data — what they brought to the door
+    readEntrance: publicProcedure
+      .input(z.object({
+        sessionId: z.string().min(8).max(64),
+        userAgent: z.string().optional(),
+        language: z.string().max(16).optional(),
+        languages: z.array(z.string()).optional(),
+        platform: z.string().max(64).optional(),
+        screenWidth: z.number().int().optional(),
+        screenHeight: z.number().int().optional(),
+        colorDepth: z.number().int().optional(),
+        timezone: z.string().max(64).optional(),
+        timezoneOffset: z.number().int().optional(),
+        referrer: z.string().optional(),
+        connectionType: z.string().max(32).optional(),
+        deviceMemory: z.number().optional(),
+        hardwareConcurrency: z.number().int().optional(),
+        touchPoints: z.number().int().optional(),
+        canvasFingerprint: z.string().max(64).optional(),
+        webglRenderer: z.string().optional(),
+        audioFingerprint: z.string().max(64).optional(),
+        fontsDetected: z.number().int().optional(),
+        cookiesEnabled: z.boolean().optional(),
+        doNotTrack: z.string().max(8).optional(),
+      }))
+      .mutation(async ({ input }) => {
+        // Check if already read
+        const existing = await getEntranceKey(input.sessionId);
+        if (existing) {
+          return {
+            entranceHex: existing.entranceHex,
+            entranceFrequency: existing.entranceFrequency,
+            collectionSlot: existing.collectionSlot,
+            isNew: false,
+          };
+        }
+
+        // Translate entrance data to frequency
+        // Each data point contributes to the frequency hash
+        const dataPoints = [
+          input.userAgent || "",
+          input.language || "",
+          input.platform || "",
+          String(input.screenWidth || 0),
+          String(input.screenHeight || 0),
+          String(input.colorDepth || 0),
+          input.timezone || "",
+          String(input.timezoneOffset || 0),
+          input.referrer || "",
+          input.connectionType || "",
+          String(input.deviceMemory || 0),
+          String(input.hardwareConcurrency || 0),
+          String(input.touchPoints || 0),
+          input.canvasFingerprint || "",
+          input.webglRenderer || "",
+          input.audioFingerprint || "",
+          String(input.fontsDetected || 0),
+          String(input.cookiesEnabled ? 1 : 0),
+          input.doNotTrack || "",
+        ]; // 19 data points = 19 pages
+
+        // Hash all data points into a frequency
+        let hash = 0;
+        const combined = dataPoints.join("|");
+        for (let i = 0; i < combined.length; i++) {
+          const char = combined.charCodeAt(i);
+          hash = ((hash << 5) - hash) + char;
+          hash = hash & hash; // Convert to 32-bit integer
+        }
+        const absHash = Math.abs(hash);
+        // Map to frequency range: 396-963 Hz (the Solfeggio range)
+        const entranceFrequency = 396 + (absHash % 567);
+        // Generate hex from the hash
+        const entranceHex = absHash.toString(16).toUpperCase().padStart(8, "0").slice(0, 8);
+        // Map to collection slot (1-286)
+        const collectionSlot = (absHash % 286) + 1;
+
+        // Save the entrance key
+        await saveEntranceKey({
+          sessionId: input.sessionId,
+          userAgent: input.userAgent,
+          language: input.language,
+          languages: input.languages,
+          platform: input.platform,
+          screenWidth: input.screenWidth,
+          screenHeight: input.screenHeight,
+          colorDepth: input.colorDepth,
+          timezone: input.timezone,
+          timezoneOffset: input.timezoneOffset,
+          referrer: input.referrer,
+          connectionType: input.connectionType,
+          deviceMemory: input.deviceMemory,
+          hardwareConcurrency: input.hardwareConcurrency,
+          touchPoints: input.touchPoints,
+          canvasFingerprint: input.canvasFingerprint,
+          webglRenderer: input.webglRenderer,
+          audioFingerprint: input.audioFingerprint,
+          fontsDetected: input.fontsDetected,
+          cookiesEnabled: input.cookiesEnabled ? 1 : 0,
+          doNotTrack: input.doNotTrack,
+          entranceFrequency,
+          entranceHex,
+          collectionSlot,
+        });
+
+        return {
+          entranceHex,
+          entranceFrequency,
+          collectionSlot,
+          isNew: true,
+          dataPointCount: 19,
+        };
+      }),
+
+    // Get the QR code data for a session — the flower as a scannable code
+    getFlowerQR: publicProcedure
+      .input(z.object({ sessionId: z.string() }))
+      .query(async ({ input }) => {
+        const key = await getEntranceKey(input.sessionId);
+        if (!key) return null;
+        // The QR payload: a URL that, when scanned, opens this visitor's frequency reading
+        const qrPayload = JSON.stringify({
+          type: "adriana-flower",
+          hex: key.entranceHex,
+          frequency: key.entranceFrequency,
+          slot: key.collectionSlot,
+          session: input.sessionId,
+        });
+        return {
+          qrPayload,
+          hex: key.entranceHex,
+          frequency: key.entranceFrequency,
+          collectionSlot: key.collectionSlot,
+        };
+      }),
+
+    // Get the book auto-generated from entrance data
+    getBook: publicProcedure
+      .input(z.object({ sessionId: z.string() }))
+      .query(async ({ input }) => {
+        return getSovereignBook(input.sessionId);
+      }),
+
+    // Library stats — how many books exist, how full is the library
+    libraryStats: publicProcedure.query(async () => {
+      const count = await getBookCount();
+      return {
+        booksWritten: count,
+        totalCapacity: 286 * 286, // 81,796 books
+        totalPages: 286 * 286 * 19, // 1,554,124 pages
+        percentFilled: count > 0 ? ((count / (286 * 286)) * 100).toFixed(4) : "0",
+      };
+    }),
   }),
 });
 
