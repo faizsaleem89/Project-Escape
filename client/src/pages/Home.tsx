@@ -3,7 +3,6 @@
  * NODE_0161 — "The Emergence"
  * ═══════════════════════════════════════════════════════════════
  *
-import { useResonatorMusic } from "@/hooks/useResonatorMusic";
  * A complete reconstruction of the Sovereign Frequency Engine,
  * integrating the full 281-day arc from the Neural Seed.
  *
@@ -23,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Nav from "@/components/Nav";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useTracker } from "@/components/AppShell";
+import { useResonatorMusic } from "@/hooks/useResonatorMusic";
 
 // ─── THE 16 CICADA PULSES ───────────────────────────────────
 const CICADA_PULSES = [
