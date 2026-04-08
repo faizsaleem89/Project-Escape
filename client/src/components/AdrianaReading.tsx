@@ -13,8 +13,9 @@ import NailCapture from "@/components/NailCapture";
  * Behaviour + Nail = the complete frequency.
  * The nail is the memory. The behaviour is the present.
  * 
- * PLAY YOUR FREQUENCY now plays the real track from the 34-song library
- * closest in dominantHz to the user's generated baseFrequency.
+ * PLAY YOUR FREQUENCY plays the real track from the 34-song library
+ * closest to the archetype's canonical seed frequency — not raw user Hz.
+ * Priority: seed track baseFrequency → Hz proximity fallback.
  */
 
 type FrequencyParams = {
@@ -67,6 +68,10 @@ export default function AdrianaReading({ sessionId, onClose, onPlayFrequency }: 
   const getReading = trpc.diagnosis.getReading.useMutation();
   const existingNail = trpc.nail.getBySession.useQuery({ sessionId });
   const { data: tracks } = trpc.music.library.useQuery();
+  const { data: seedTrack } = trpc.tracks.getByArchetype.useQuery(
+    { archetypeId: frequency?.archetypeId ?? "" },
+    { enabled: !!frequency?.archetypeId }
+  );
 
   // Phase 1: Scan animation
   useEffect(() => {
@@ -127,6 +132,7 @@ export default function AdrianaReading({ sessionId, onClose, onPlayFrequency }: 
   }, [phase, sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Play the closest real track from the library
+  // Priority: use the archetype's canonical seed Hz → fall back to user's raw baseFrequency
   const playPersonalFrequency = useCallback(() => {
     if (!frequency) return;
 
@@ -141,11 +147,14 @@ export default function AdrianaReading({ sessionId, onClose, onPlayFrequency }: 
 
     if (!tracks || (tracks as TrackInfo[]).length === 0) return;
 
-    // Find the track whose dominantHz is closest to the user's baseFrequency
+    // Seed track gives the archetype's canonical Hz (intentional).
+    // Fall back to user's personal baseFrequency if seed hasn't loaded.
+    const targetHz = (seedTrack as any)?.baseFrequency ?? frequency.baseFrequency;
+
     const sorted = [...(tracks as TrackInfo[])].sort(
       (a, b) =>
-        Math.abs(a.dominantHz - frequency.baseFrequency) -
-        Math.abs(b.dominantHz - frequency.baseFrequency)
+        Math.abs(a.dominantHz - targetHz) -
+        Math.abs(b.dominantHz - targetHz)
     );
     const closest = sorted[0];
     setMatchedTrack(closest);
@@ -160,7 +169,7 @@ export default function AdrianaReading({ sessionId, onClose, onPlayFrequency }: 
         })
         .catch(err => console.error("[AdrianaReading] Audio play failed:", err));
     }
-  }, [frequency, isPlayingFreq, tracks, onPlayFrequency]);
+  }, [frequency, isPlayingFreq, tracks, seedTrack, onPlayFrequency]);
 
   // Cleanup audio on unmount
   useEffect(() => {
@@ -515,12 +524,25 @@ export default function AdrianaReading({ sessionId, onClose, onPlayFrequency }: 
             {matchedTrack && (
               <div style={{
                 textAlign: "center",
-                fontSize: "0.38rem",
-                color: "rgba(0,255,65,0.35)",
                 marginTop: "0.5rem",
-                letterSpacing: "0.12em",
               }}>
-                ↳ {matchedTrack.title} · {matchedTrack.dominantHz.toFixed(1)} Hz
+                <div style={{
+                  fontSize: "0.38rem",
+                  color: "rgba(0,255,65,0.4)",
+                  letterSpacing: "0.12em",
+                }}>
+                  ↳ {matchedTrack.title} · {matchedTrack.dominantHz.toFixed(1)} Hz
+                </div>
+                {(seedTrack as any)?.baseFrequency && (
+                  <div style={{
+                    fontSize: "0.33rem",
+                    color: "rgba(0,255,65,0.2)",
+                    letterSpacing: "0.1em",
+                    marginTop: "0.15rem",
+                  }}>
+                    archetype canonical: {(seedTrack as any).baseFrequency} Hz · your signal: {frequency?.baseFrequency} Hz
+                  </div>
+                )}
               </div>
             )}
 
