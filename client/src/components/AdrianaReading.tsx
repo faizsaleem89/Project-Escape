@@ -12,6 +12,9 @@ import NailCapture from "@/components/NailCapture";
  * Now integrates nail reading — the original protocol.
  * Behaviour + Nail = the complete frequency.
  * The nail is the memory. The behaviour is the present.
+ * 
+ * PLAY YOUR FREQUENCY now plays the real track from the 34-song library
+ * closest in dominantHz to the user's generated baseFrequency.
  */
 
 type FrequencyParams = {
@@ -28,6 +31,13 @@ type ReadingProps = {
   sessionId: string;
   onClose: () => void;
   onPlayFrequency?: (params: FrequencyParams) => void;
+};
+
+type TrackInfo = {
+  index: number;
+  title: string;
+  dominantHz: number;
+  cdnUrl: string;
 };
 
 const ARCHETYPE_NAMES: Record<string, string> = {
@@ -48,14 +58,15 @@ export default function AdrianaReading({ sessionId, onClose, onPlayFrequency }: 
   const [reading, setReading] = useState<string | null>(null);
   const [scanProgress, setScanProgress] = useState(0);
   const [isPlayingFreq, setIsPlayingFreq] = useState(false);
+  const [matchedTrack, setMatchedTrack] = useState<TrackInfo | null>(null);
   const [hasNailReading, setHasNailReading] = useState(false);
   const [nailArchetype, setNailArchetype] = useState<string | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const oscillatorsRef = useRef<{ osc: OscillatorNode; gain: GainNode }[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const generateHex = trpc.diagnosis.generateHex.useMutation();
   const getReading = trpc.diagnosis.getReading.useMutation();
   const existingNail = trpc.nail.getBySession.useQuery({ sessionId });
+  const { data: tracks } = trpc.music.library.useQuery();
 
   // Phase 1: Scan animation
   useEffect(() => {
@@ -64,7 +75,6 @@ export default function AdrianaReading({ sessionId, onClose, onPlayFrequency }: 
       setScanProgress(prev => {
         if (prev >= 100) {
           clearInterval(interval);
-          // After scan, check if nail reading exists — if not, offer it
           if (existingNail.data && existingNail.data.status === "complete") {
             setHasNailReading(true);
             setNailArchetype(existingNail.data.archetypeId || null);
@@ -98,7 +108,6 @@ export default function AdrianaReading({ sessionId, onClose, onPlayFrequency }: 
         setHexSignature(hexResult.hexSignature!);
         setFrequency(hexResult.frequency as FrequencyParams);
 
-        // Now get Adriana's reading (which now includes nail data if available)
         const readingResult = await getReading.mutateAsync({ sessionId });
         if (cancelled) return;
 
@@ -117,65 +126,49 @@ export default function AdrianaReading({ sessionId, onClose, onPlayFrequency }: 
     return () => { cancelled = true; };
   }, [phase, sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Play the personal frequency
+  // Play the closest real track from the library
   const playPersonalFrequency = useCallback(() => {
     if (!frequency) return;
 
     if (isPlayingFreq) {
-      oscillatorsRef.current.forEach(({ osc, gain }) => {
-        if (audioCtxRef.current) {
-          gain.gain.exponentialRampToValueAtTime(0.0001, audioCtxRef.current.currentTime + 0.5);
-          setTimeout(() => { try { osc.stop(); } catch (_) { /* */ } }, 500);
-        }
-      });
-      oscillatorsRef.current = [];
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
       setIsPlayingFreq(false);
       return;
     }
 
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    audioCtxRef.current = ctx;
+    if (!tracks || (tracks as TrackInfo[]).length === 0) return;
 
-    const freqs = [frequency.baseFrequency, frequency.fifthHarmonic, frequency.subOctave];
-    const waveTypes: OscillatorType[] = [
-      frequency.waveformType as OscillatorType,
-      "triangle",
-      "sine",
-    ];
+    // Find the track whose dominantHz is closest to the user's baseFrequency
+    const sorted = [...(tracks as TrackInfo[])].sort(
+      (a, b) =>
+        Math.abs(a.dominantHz - frequency.baseFrequency) -
+        Math.abs(b.dominantHz - frequency.baseFrequency)
+    );
+    const closest = sorted[0];
+    setMatchedTrack(closest);
 
-    freqs.forEach((f, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = waveTypes[i] || "sine";
-      osc.frequency.setValueAtTime(f, ctx.currentTime);
-      gain.gain.setValueAtTime(0, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(i === 0 ? 0.1 : 0.03, ctx.currentTime + 2);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      oscillatorsRef.current.push({ osc, gain });
-    });
-
-    // LFO for biological pulse
-    const lfo = ctx.createOscillator();
-    const lfoGain = ctx.createGain();
-    lfo.frequency.setValueAtTime(frequency.lfoRate, ctx.currentTime);
-    lfoGain.gain.setValueAtTime(0.02, ctx.currentTime);
-    lfo.connect(lfoGain);
-    lfoGain.connect(ctx.destination);
-    lfo.start();
-    oscillatorsRef.current.push({ osc: lfo, gain: lfoGain });
-
-    setIsPlayingFreq(true);
-    if (onPlayFrequency) onPlayFrequency(frequency);
-  }, [frequency, isPlayingFreq, onPlayFrequency]);
+    if (audioRef.current) {
+      audioRef.current.src = closest.cdnUrl;
+      audioRef.current.load();
+      audioRef.current.play()
+        .then(() => {
+          setIsPlayingFreq(true);
+          if (onPlayFrequency) onPlayFrequency(frequency);
+        })
+        .catch(err => console.error("[AdrianaReading] Audio play failed:", err));
+    }
+  }, [frequency, isPlayingFreq, tracks, onPlayFrequency]);
 
   // Cleanup audio on unmount
   useEffect(() => {
     return () => {
-      oscillatorsRef.current.forEach(({ osc }) => {
-        try { osc.stop(); } catch (_) { /* */ }
-      });
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = "";
+      }
     };
   }, []);
 
@@ -196,6 +189,13 @@ export default function AdrianaReading({ sessionId, onClose, onPlayFrequency }: 
       }}
     >
       <div style={{ width: "100%", maxWidth: "28rem" }}>
+        {/* Hidden audio element — plays the matched real track */}
+        <audio
+          ref={audioRef}
+          onEnded={() => { setIsPlayingFreq(false); }}
+          preload="none"
+        />
+
         {/* Close button */}
         <button
           onClick={onClose}
@@ -510,6 +510,19 @@ export default function AdrianaReading({ sessionId, onClose, onPlayFrequency }: 
             >
               {isPlayingFreq ? "▪ Stop Your Frequency" : "▶ Play Your Frequency"}
             </button>
+
+            {/* Matched track label */}
+            {matchedTrack && (
+              <div style={{
+                textAlign: "center",
+                fontSize: "0.38rem",
+                color: "rgba(0,255,65,0.35)",
+                marginTop: "0.5rem",
+                letterSpacing: "0.12em",
+              }}>
+                ↳ {matchedTrack.title} · {matchedTrack.dominantHz.toFixed(1)} Hz
+              </div>
+            )}
 
             {/* Footer */}
             <div style={{
